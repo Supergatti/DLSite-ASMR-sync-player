@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ASMR Nexus - Sync Player</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+
+    <div class="app-container">
+        
+        <!-- Sidebar for media selection -->
+        <aside class="sidebar glass-panel">
+            <div class="sidebar-header" style="display: flex; justify-content: space-between; align-items: center;">
+                <h2><i class="fa-solid fa-folder-open" style="margin-right: 8px;"></i>Library</h2>
+                <button class="icon-btn" id="btn-alist-config" style="width:32px; height:32px; font-size:1rem;" title="AList Login">
+                    <i class="fa-solid fa-cloud-arrow-up"></i>
+                </button>
+            </div>
+            
+            <div class="sidebar-tabs">
+                <button class="tab-btn active" data-target="pane-video"><i class="fa-solid fa-video"></i> Video</button>
+                <button class="tab-btn" data-target="pane-audio"><i class="fa-solid fa-microphone"></i> Audio</button>
+            </div>
+
+            <div class="tab-content" style="flex: 1; overflow: hidden; display: flex; flex-direction: column;">
+                <!-- Video Pane -->
+                <div id="pane-video" class="tab-pane active media-list">
+                    <button class="selector-btn" id="btn-video-folder" style="margin-bottom: 8px;">
+                        <i class="fa-solid fa-folder-plus"></i> Browse Video Folder
+                    </button>
+                    <input type="file" id="input-video-folder" webkitdirectory directory multiple hidden>
+
+                    <div class="alist-form" style="margin-bottom: 8px;">
+                        <div style="display:flex; gap:6px;">
+                            <input type="text" id="local-vid-path" class="alist-input" placeholder="E:\ASMR\edit" value="E:\ASMR\edit" style="flex:1;">
+                            <button class="selector-btn mini-btn" id="btn-local-video" style="width:auto; white-space:nowrap;"><i class="fa-solid fa-folder-open"></i></button>
+                        </div>
+                    </div>
+                    
+                    <div class="alist-form">
+                        <div style="display:flex; gap:6px;">
+                            <input type="text" id="alist-vid-path" class="alist-input" placeholder="AList /path" style="flex:1;">
+                            <button class="selector-btn mini-btn" id="btn-alist-video" style="width:auto; white-space:nowrap;"><i class="fa-solid fa-cloud"></i></button>
+                        </div>
+                    </div>
+
+                    <div id="list-video" style="margin-top: 16px;">
+                        <div class="empty-state" style="text-align: center; padding: 20px; color: rgba(255,255,255,0.5);">Select folder to load videos.</div>
+                    </div>
+                </div>
+
+                <!-- Audio Pane -->
+                <div id="pane-audio" class="tab-pane media-list">
+                    <button class="selector-btn" id="btn-audio-folder" style="margin-bottom: 8px;">
+                        <i class="fa-solid fa-folder-plus"></i> Browse Audio Folder
+                    </button>
+                    <input type="file" id="input-audio-folder" webkitdirectory directory multiple hidden>
+
+                    <div class="alist-form" style="margin-bottom: 8px;">
+                        <div style="display:flex; gap:6px;">
+                            <input type="text" id="local-aud-path" class="alist-input" placeholder="E:\ASMR\resourse" value="E:\ASMR\resourse" style="flex:1;">
+                            <button class="selector-btn mini-btn" id="btn-local-audio" style="width:auto; white-space:nowrap;"><i class="fa-solid fa-folder-open"></i></button>
+                        </div>
+                    </div>
+                    
+                    <div class="alist-form">
+                        <div style="display:flex; gap:6px;">
+                            <input type="text" id="alist-aud-path" class="alist-input" placeholder="AList /path" style="flex:1;">
+                            <button class="selector-btn mini-btn" id="btn-alist-audio" style="width:auto; white-space:nowrap;"><i class="fa-solid fa-cloud"></i></button>
+                        </div>
+                    </div>
+
+                    <div id="list-audio" style="margin-top: 16px;">
+                        <div class="empty-state" style="text-align: center; padding: 20px; color: rgba(255,255,255,0.5);">Select folder to load ASMR audios.</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="sidebar-footer" style="display:flex; flex-direction:column; gap:4px;">
+                <div id="now-playing-video" class="footer-label">Video: None</div>
+                <div id="now-playing-audio" class="footer-label">Audio: None</div>
+            </div>
+        </aside>
+
+        <!-- Main Player Area -->
+        <main class="player-container">
+            <div class="video-wrapper glass-panel" id="video-wrapper">
+                
+                <!-- Hidden Audio element for ASMR layer -->
+                <audio id="asmr-audio" preload="metadata"></audio>
+                
+                <!-- Main Video Element -->
+                <video id="main-video" preload="metadata">
+                    <track id="track-video" kind="subtitles" label="Video CC" srclang="en">
+                </video>
+
+                <!-- Custom Audio Subtitle Overlay -->
+                <div id="audio-sub-overlay" class="audio-sub-overlay"></div>
+
+                <!-- Custom Overlay Play Button (Big) -->
+                <div class="overlay-play-btn" id="overlay-play">
+                    <i class="fa-solid fa-play"></i>
+                </div>
+
+                <!-- Custom Player Controls -->
+                <div class="controls-panel glass-panel">
+                    
+                    <div class="timeline-container" style="margin-bottom: 8px;">
+                        <span class="time-text" style="color:var(--accent);"><i class="fa-solid fa-video"></i></span>
+                        <span class="time-text" id="time-current-vid">00:00</span>
+                        <div class="progress-bar-bg" id="progress-bar-vid">
+                            <div class="progress-bar-fill" id="progress-fill-vid"></div>
+                            <div class="progress-bar-thumb" id="progress-thumb-vid"></div>
+                        </div>
+                        <span class="time-text" id="time-total-vid">00:00</span>
+                    </div>
+
+                    <div class="timeline-container">
+                        <span class="time-text" style="color:var(--accent);"><i class="fa-solid fa-microphone"></i></span>
+                        <span class="time-text" id="time-current-aud">00:00</span>
+                        <div class="progress-bar-bg" id="progress-bar-aud">
+                            <div class="progress-bar-fill" id="progress-fill-aud"></div>
+                            <div class="progress-bar-thumb" id="progress-thumb-aud"></div>
+                        </div>
+                        <span class="time-text" id="time-total-aud">00:00</span>
+                    </div>
+
+                    <div class="controls-bottomrow">
+                        <div class="left-controls">
+                            <button class="icon-btn" id="btn-play-pause">
+                                <i class="fa-solid fa-play"></i>
+                            </button>
+                            <button class="icon-btn" id="btn-stop">
+                                <i class="fa-solid fa-stop"></i>
+                            </button>
+                        </div>
+
+                        <div class="mid-controls">
+                            <div class="volume-control">
+                                <span class="volume-label"><i class="fa-solid fa-video"></i> Video</span>
+                                <input type="range" class="vol-slider" id="vol-video" min="0" max="1" step="0.01" value="0.5">
+                            </div>
+                            <div class="volume-control asmr-vol">
+                                <span class="volume-label"><i class="fa-solid fa-microphone"></i> Audio</span>
+                                <input type="range" class="vol-slider" id="vol-audio" min="0" max="1" step="0.01" value="1.0">
+                            </div>
+                        </div>
+
+                        <div class="right-controls">
+                            <button class="icon-btn" id="btn-sub" title="Toggle Subtitles" style="font-size: 0.85rem; font-weight: 600; width: 80px; padding: 0 10px;">
+                                CC: OFF
+                            </button>
+                            <button class="icon-btn" id="btn-fullscreen">
+                                <i class="fa-solid fa-expand"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </main>
+    </div>
+
+    <!-- AList Login Modal -->
+    <div id="alist-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; z-index:99; justify-content:center; align-items:center; background: rgba(0,0,0,0.6);" class="glass-panel">
+        <div class="modal-content glass-panel" style="padding:24px; border-radius:12px; width:300px; display:flex; flex-direction:column; gap:12px;">
+            <h3 style="color:#fff; margin-bottom:8px;"><i class="fa-solid fa-cloud-arrow-up" style="margin-right:8px;"></i>AList Server</h3>
+            <input type="text" id="modal-alist-url" class="alist-input" placeholder="Server (http://127.0.0.1:5244)" value="http://127.0.0.1:5244">
+            <input type="text" id="modal-alist-user" class="alist-input" placeholder="Username (e.g. admin)">
+            <input type="password" id="modal-alist-pass" class="alist-input" placeholder="Password">
+            <div style="font-size: 0.8rem; color: rgba(255,255,255,0.5);">
+                <input type="checkbox" id="modal-alist-remember" checked> <label for="modal-alist-remember">Remember Login & Paths</label>
+            </div>
+            <div id="modal-alist-error" style="color:salmon; font-size:0.8rem; display:none;"></div>
+            <div style="display:flex; justify-content: space-between; gap:12px; margin-top:12px;">
+                <button class="selector-btn mini-btn" id="modal-btn-cancel" style="background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.2); color: #fff; flex:1;">Close</button>
+                <button class="selector-btn mini-btn" id="modal-btn-login" style="flex:1;">Save / Auth</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>
