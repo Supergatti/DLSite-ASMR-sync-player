@@ -2,6 +2,9 @@
 
 一个轻量的本地网页播放器。可在浏览器中播放所选目录或远程网盘（Alist）中的媒体文件持。
 
+<img width="1898" height="848" alt="image" src="https://github.com/user-attachments/assets/ca30ada2-1d74-4aa3-a775-5cf701c5edc0" />
+
+
 ## 功能
 - 同步播放：在播放时保持音视频与字幕同步，支持本地与 Alist 源
 - 可在播放ASMR音频同时播放视频，音量可调
