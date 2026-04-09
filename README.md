@@ -1,6 +1,6 @@
 # DLSite ASMR Player
 
-一个轻量的本地网页播放器。可在浏览器中播放所选目录或远程网盘（Alist）中的媒体文件持。
+一个轻量的本地网页播放器。可在浏览器中同时播放所选目录或远程网盘（Alist）中的音频和视频文件。
 
 <img width="1898" height="848" alt="image" src="https://github.com/user-attachments/assets/ca30ada2-1d74-4aa3-a775-5cf701c5edc0" />
 
