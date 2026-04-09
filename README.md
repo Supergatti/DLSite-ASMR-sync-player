@@ -1,10 +1,13 @@
 # DLSite ASMR Player
 
-一个轻量的本地网页播放器后端，专注于“同步播放”（在播放时保持音视频与字幕的时序同步）。可在浏览器中播放放置于本地 `media/` 目录或远程网盘（Alist）中的媒体文件，提供简单前端界面与字幕转换支持。
+一个轻量的本地网页播放器。可在浏览器中同时播放所选目录或远程网盘（Alist）中的音频和视频文件。
+
+<img width="1898" height="848" alt="image" src="https://github.com/user-attachments/assets/ca30ada2-1d74-4aa3-a775-5cf701c5edc0" />
+
 
 ## 功能
 - 同步播放：在播放时保持音视频与字幕同步，支持本地与 Alist 源
-- 在 `media/` 目录下提供媒体文件静态托管（视频/音频/字幕）
+- 可在播放ASMR音频同时播放视频，音量可调
 - 提供本地目录和文件的 API（/api/local/*）用于选择本地文件
 - 支持 Alist 代理请求（列表、登录、抓取字幕）
 
@@ -64,9 +67,3 @@ python server.py
 - media/        # 放媒体文件
 - static/       # 前端页面与脚本 (index.html, app.js, style.css)
 ```
-
-## 开发与贡献
-- 欢迎提交 issue 或 PR。建议在 PR 中说明测试步骤与可复现样例。
-
-## 许可
-此仓库默认未指定许可。若需开源，请补充 `LICENSE`（例如 MIT）。
