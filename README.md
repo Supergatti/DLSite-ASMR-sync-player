@@ -2,6 +2,8 @@
 
 一个轻量的本地网页播放器。可在浏览器中同时播放所选目录或远程网盘（Alist）中的音频和视频文件。
 
+欢迎加入大家一起来翻译🥰
+
 <img width="1898" height="848" alt="image" src="https://github.com/user-attachments/assets/ca30ada2-1d74-4aa3-a775-5cf701c5edc0" />
 
 
