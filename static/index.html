@@ -29,18 +29,28 @@
             <div class="tab-content" style="flex: 1; overflow: hidden; display: flex; flex-direction: column;">
                 <!-- Video Pane -->
                 <div id="pane-video" class="tab-pane active media-list">
-                    <button class="selector-btn" id="btn-video-folder" style="margin-bottom: 8px;">
-                        <i class="fa-solid fa-folder-plus"></i> Browse Video Folder
+                    <section class="pc-library-panel" aria-label="PC video library">
+                        <div class="library-heading">
+                            <span><i class="fa-solid fa-computer"></i> PC Media Library</span>
+                            <button class="library-icon-btn" id="btn-library-video-refresh" title="Refresh PC library" aria-label="Refresh PC video library">
+                                <i class="fa-solid fa-rotate"></i>
+                            </button>
+                        </div>
+                        <select id="library-video-root" class="alist-input library-root-select" aria-label="Video media root"></select>
+                        <div class="library-nav-row">
+                            <button class="library-icon-btn" id="btn-library-video-up" title="Parent folder" aria-label="Open parent folder" disabled>
+                                <i class="fa-solid fa-arrow-up"></i>
+                            </button>
+                            <div id="library-video-path" class="library-current-path" title="/">/</div>
+                        </div>
+                    </section>
+
+                    <button class="selector-btn device-folder-btn" id="btn-video-folder">
+                        <i class="fa-solid fa-tablet-screen-button"></i> Files on this device
                     </button>
                     <input type="file" id="input-video-folder" webkitdirectory directory multiple hidden>
 
-                    <div class="alist-form" style="margin-bottom: 8px;">
-                        <div style="display:flex; gap:6px;">
-                            <input type="text" id="local-vid-path" class="alist-input" placeholder="E:\ASMR\edit" value="E:\ASMR\edit" style="flex:1;">
-                            <button class="selector-btn mini-btn" id="btn-local-video" style="width:auto; white-space:nowrap;"><i class="fa-solid fa-folder-open"></i></button>
-                        </div>
-                    </div>
-                    
+                    <div class="source-divider"><span>AList</span></div>
                     <div class="alist-form">
                         <div style="display:flex; gap:6px;">
                             <input type="text" id="alist-vid-path" class="alist-input" placeholder="AList /path" style="flex:1;">
@@ -48,25 +58,35 @@
                         </div>
                     </div>
 
-                    <div id="list-video" style="margin-top: 16px;">
-                        <div class="empty-state" style="text-align: center; padding: 20px; color: rgba(255,255,255,0.5);">Select folder to load videos.</div>
+                    <div id="list-video" class="library-results">
+                        <div class="empty-state">Loading PC video library...</div>
                     </div>
                 </div>
 
                 <!-- Audio Pane -->
                 <div id="pane-audio" class="tab-pane media-list">
-                    <button class="selector-btn" id="btn-audio-folder" style="margin-bottom: 8px;">
-                        <i class="fa-solid fa-folder-plus"></i> Browse Audio Folder
+                    <section class="pc-library-panel" aria-label="PC audio library">
+                        <div class="library-heading">
+                            <span><i class="fa-solid fa-computer"></i> PC Media Library</span>
+                            <button class="library-icon-btn" id="btn-library-audio-refresh" title="Refresh PC library" aria-label="Refresh PC audio library">
+                                <i class="fa-solid fa-rotate"></i>
+                            </button>
+                        </div>
+                        <select id="library-audio-root" class="alist-input library-root-select" aria-label="Audio media root"></select>
+                        <div class="library-nav-row">
+                            <button class="library-icon-btn" id="btn-library-audio-up" title="Parent folder" aria-label="Open parent folder" disabled>
+                                <i class="fa-solid fa-arrow-up"></i>
+                            </button>
+                            <div id="library-audio-path" class="library-current-path" title="/">/</div>
+                        </div>
+                    </section>
+
+                    <button class="selector-btn device-folder-btn" id="btn-audio-folder">
+                        <i class="fa-solid fa-tablet-screen-button"></i> Files on this device
                     </button>
                     <input type="file" id="input-audio-folder" webkitdirectory directory multiple hidden>
 
-                    <div class="alist-form" style="margin-bottom: 8px;">
-                        <div style="display:flex; gap:6px;">
-                            <input type="text" id="local-aud-path" class="alist-input" placeholder="E:\ASMR\resourse" value="E:\ASMR\resourse" style="flex:1;">
-                            <button class="selector-btn mini-btn" id="btn-local-audio" style="width:auto; white-space:nowrap;"><i class="fa-solid fa-folder-open"></i></button>
-                        </div>
-                    </div>
-                    
+                    <div class="source-divider"><span>AList</span></div>
                     <div class="alist-form">
                         <div style="display:flex; gap:6px;">
                             <input type="text" id="alist-aud-path" class="alist-input" placeholder="AList /path" style="flex:1;">
@@ -74,8 +94,8 @@
                         </div>
                     </div>
 
-                    <div id="list-audio" style="margin-top: 16px;">
-                        <div class="empty-state" style="text-align: center; padding: 20px; color: rgba(255,255,255,0.5);">Select folder to load ASMR audios.</div>
+                    <div id="list-audio" class="library-results">
+                        <div class="empty-state">Loading PC audio library...</div>
                     </div>
                 </div>
             </div>
@@ -94,7 +114,7 @@
                 <audio id="asmr-audio" preload="metadata"></audio>
                 
                 <!-- Main Video Element -->
-                <video id="main-video" preload="metadata">
+                <video id="main-video" preload="metadata" playsinline webkit-playsinline>
                     <track id="track-video" kind="subtitles" label="Video CC" srclang="en">
                 </video>
 
@@ -153,6 +173,9 @@
                         <div class="right-controls">
                             <button class="icon-btn" id="btn-sub" title="Toggle Subtitles" style="font-size: 0.85rem; font-weight: 600; width: 80px; padding: 0 10px;">
                                 CC: OFF
+                            </button>
+                            <button class="icon-btn subtitle-size-btn" id="btn-sub-size" title="Subtitle size" aria-label="Subtitle size: 100 percent">
+                                A 100%
                             </button>
                             <button class="icon-btn" id="btn-fullscreen">
                                 <i class="fa-solid fa-expand"></i>

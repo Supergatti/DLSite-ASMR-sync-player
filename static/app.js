@@ -13,6 +13,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const videoWrapper = document.getElementById('video-wrapper');
     const controlsPanel = document.querySelector('.controls-panel');
     const btnSub = document.getElementById('btn-sub');
+    const btnSubSize = document.getElementById('btn-sub-size');
     const btnFullscreen = document.getElementById('btn-fullscreen');
     
     // Volumes
@@ -52,6 +53,15 @@ document.addEventListener('DOMContentLoaded', () => {
         return `${m}:${s}`;
     }
 
+    function escapeHtml(value) {
+        return String(value)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+    }
+
     // --- Tab Logic ---
     const tabBtns = document.querySelectorAll('.tab-btn');
     const tabPanes = document.querySelectorAll('.tab-pane');
@@ -71,12 +81,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     let videoData = {};
     let audioData = {};
-
-    // Restore saved local paths
-    const savedVidPath = localStorage.getItem('localVidPath');
-    const savedAudPath = localStorage.getItem('localAudPath');
-    if (savedVidPath) document.getElementById('local-vid-path').value = savedVidPath;
-    if (savedAudPath) document.getElementById('local-aud-path').value = savedAudPath;
 
     // --- Helper: group files with subtitle matching ---
     function matchSubtitles(medias, subs) {
@@ -110,6 +114,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (['mp4', 'webm', 'mkv', 'ogg'].includes(ext)) videos.push(obj);
             else if (['vtt', 'srt'].includes(ext)) subs.push(obj);
         }
+        pcLibraryState.video.source = 'device';
         videoData = matchSubtitles(videos, subs);
         renderVideoList();
     });
@@ -122,62 +127,156 @@ document.addEventListener('DOMContentLoaded', () => {
             if (['mp3', 'wav', 'flac', 'aac', 'm4a', 'ogg', 'mka'].includes(ext)) audios.push(obj);
             else if (['vtt', 'srt'].includes(ext)) subs.push(obj);
         }
+        pcLibraryState.audio.source = 'device';
         audioData = matchSubtitles(audios, subs);
         renderAudioList();
     });
 
-    // --- Server-backed path loading (type path + click icon) ---
-    function groupServerFiles(fileList, mediaExts, dirPath) {
-        let medias = [], subs = [];
-        for (const f of fileList) {
-            const ext = f.name.split('.').pop().toLowerCase();
-            const filePath = dirPath.replace(/[\/\\]$/, '') + '\\' + f.name;
-            const fileObj = { name: f.name, isAlist: false, url: '/api/local/file?path=' + encodeURIComponent(filePath) };
-            if (mediaExts.includes(ext)) medias.push(fileObj);
-            else if (['vtt', 'srt'].includes(ext)) subs.push(fileObj);
+    // --- Restricted PC media library ---
+    const libraryControls = {
+        video: {
+            root: document.getElementById('library-video-root'),
+            path: document.getElementById('library-video-path'),
+            up: document.getElementById('btn-library-video-up'),
+            refresh: document.getElementById('btn-library-video-refresh'),
+            list: listVideo,
+            mediaExts: ['mp4', 'webm', 'mkv', 'ogg']
+        },
+        audio: {
+            root: document.getElementById('library-audio-root'),
+            path: document.getElementById('library-audio-path'),
+            up: document.getElementById('btn-library-audio-up'),
+            refresh: document.getElementById('btn-library-audio-refresh'),
+            list: listAudio,
+            mediaExts: ['mp3', 'wav', 'flac', 'aac', 'm4a', 'ogg', 'mka']
         }
-        return matchSubtitles(medias, subs);
+    };
+
+    const pcLibraryState = {
+        video: { root: '', path: '', parent: null, directories: [], source: 'pc' },
+        audio: { root: '', path: '', parent: null, directories: [], source: 'pc' }
+    };
+
+    async function fetchJson(url) {
+        const response = await fetch(url);
+        let payload = null;
+        try {
+            payload = await response.json();
+        } catch (_) {
+            // Status text below is enough when the server returned HTML.
+        }
+        if (!response.ok) {
+            throw new Error(payload?.error || payload?.message || `Request failed (${response.status})`);
+        }
+        return payload;
     }
 
-    document.getElementById('btn-local-video').addEventListener('click', async () => {
-        const dirPath = document.getElementById('local-vid-path').value.trim();
-        if (!dirPath) return;
-        localStorage.setItem('localVidPath', dirPath);
-        listVideo.innerHTML = '<div class="loading">Loading...</div>';
-        try {
-            const req = await fetch('/api/local/list', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ path: dirPath })
-            });
-            const res = await req.json();
-            if (res.error) throw new Error(res.error);
-            videoData = groupServerFiles(res.files, ['mp4', 'webm', 'mkv', 'ogg'], dirPath);
-            renderVideoList();
-        } catch(e) {
-            listVideo.innerHTML = `<div class="empty-state">Error: ${e.message}</div>`;
-        }
-    });
+    function updateLibraryNavigation(kind) {
+        const controls = libraryControls[kind];
+        const state = pcLibraryState[kind];
+        const displayPath = state.path ? `/${state.path}` : '/';
+        controls.path.textContent = displayPath;
+        controls.path.title = displayPath;
+        controls.up.disabled = state.parent === null;
+    }
 
-    document.getElementById('btn-local-audio').addEventListener('click', async () => {
-        const dirPath = document.getElementById('local-aud-path').value.trim();
-        if (!dirPath) return;
-        localStorage.setItem('localAudPath', dirPath);
-        listAudio.innerHTML = '<div class="loading">Loading...</div>';
+    async function loadPcDirectory(kind, targetPath = '', allowRootFallback = true) {
+        const controls = libraryControls[kind];
+        const state = pcLibraryState[kind];
+        if (!state.root) return;
+
+        controls.list.innerHTML = '<div class="loading">Loading PC library...</div>';
+        const query = new URLSearchParams({ root: state.root, path: targetPath });
         try {
-            const req = await fetch('/api/local/list', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ path: dirPath })
-            });
-            const res = await req.json();
-            if (res.error) throw new Error(res.error);
-            audioData = groupServerFiles(res.files, ['mp3', 'wav', 'flac', 'aac', 'm4a', 'ogg', 'mka'], dirPath);
-            renderAudioList();
-        } catch(e) {
-            listAudio.innerHTML = `<div class="empty-state">Error: ${e.message}</div>`;
+            const result = await fetchJson(`/api/library/list?${query.toString()}`);
+            state.path = result.path || '';
+            state.parent = result.parent;
+            state.directories = result.directories || [];
+            state.source = 'pc';
+            localStorage.setItem(`pcLibrary${kind}Root`, state.root);
+            localStorage.setItem(`pcLibrary${kind}Path`, state.path);
+            updateLibraryNavigation(kind);
+
+            const media = [];
+            const subtitles = [];
+            for (const file of result.files || []) {
+                const ext = file.name.split('.').pop().toLowerCase();
+                const item = { name: file.name, isAlist: false, url: file.url };
+                if (controls.mediaExts.includes(ext)) media.push(item);
+                else if (['vtt', 'srt'].includes(ext)) subtitles.push(item);
+            }
+
+            if (kind === 'video') {
+                videoData = matchSubtitles(media, subtitles);
+                renderVideoList();
+            } else {
+                audioData = matchSubtitles(media, subtitles);
+                renderAudioList();
+            }
+        } catch (error) {
+            if (targetPath && allowRootFallback) {
+                localStorage.removeItem(`pcLibrary${kind}Path`);
+                await loadPcDirectory(kind, '', false);
+                return;
+            }
+            controls.list.innerHTML = `<div class="empty-state">PC library error: ${escapeHtml(error.message)}</div>`;
         }
-    });
+    }
+
+    async function initializePcLibraries() {
+        try {
+            const result = await fetchJson('/api/library/roots');
+            const availableRoots = (result.roots || []).filter(root => root.available);
+
+            for (const kind of ['video', 'audio']) {
+                const controls = libraryControls[kind];
+                controls.root.innerHTML = '';
+                for (const root of result.roots || []) {
+                    const option = document.createElement('option');
+                    option.value = root.id;
+                    option.textContent = root.available ? root.name : `${root.name} (unavailable)`;
+                    option.disabled = !root.available;
+                    controls.root.appendChild(option);
+                }
+
+                if (availableRoots.length === 0) {
+                    controls.list.innerHTML = '<div class="empty-state">No available PC media roots. Check media_roots.json on the PC.</div>';
+                    continue;
+                }
+
+                const savedRoot = localStorage.getItem(`pcLibrary${kind}Root`);
+                const selectedRoot = availableRoots.some(root => root.id === savedRoot)
+                    ? savedRoot
+                    : availableRoots[0].id;
+                controls.root.value = selectedRoot;
+                pcLibraryState[kind].root = selectedRoot;
+                const savedPath = localStorage.getItem(`pcLibrary${kind}Path`) || '';
+                await loadPcDirectory(kind, savedPath);
+            }
+        } catch (error) {
+            const message = `<div class="empty-state">PC library error: ${escapeHtml(error.message)}</div>`;
+            listVideo.innerHTML = message;
+            listAudio.innerHTML = message;
+        }
+    }
+
+    for (const kind of ['video', 'audio']) {
+        const controls = libraryControls[kind];
+        controls.root.addEventListener('change', () => {
+            pcLibraryState[kind].root = controls.root.value;
+            pcLibraryState[kind].path = '';
+            loadPcDirectory(kind, '');
+        });
+        controls.up.addEventListener('click', () => {
+            const parent = pcLibraryState[kind].parent;
+            if (parent !== null) loadPcDirectory(kind, parent);
+        });
+        controls.refresh.addEventListener('click', () => {
+            loadPcDirectory(kind, pcLibraryState[kind].path);
+        });
+    }
+
+    const pcLibrariesReady = initializePcLibraries();
 
     // --- Alist Logic ---
     let currentAlistBaseUrl = localStorage.getItem('alistUrl') || 'http://127.0.0.1:5244';
@@ -193,14 +292,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const modalBtnLogin = document.getElementById('modal-btn-login');
     const modalError = document.getElementById('modal-alist-error');
     
-    // Auto Load Alist path triggers if configured
-    if (localStorage.getItem('alistAutoLoad') === '1') {
+    const autoLoadAlist = localStorage.getItem('alistAutoLoad') === '1';
+    if (autoLoadAlist) {
         document.getElementById('modal-alist-remember').checked = true;
-        // Check if token exists, change cloud color
         if (currentAlistToken) {
             btnAlistConfig.innerHTML = '<i class="fa-solid fa-cloud" style="color:var(--accent);"></i>';
-            if (document.getElementById('alist-vid-path').value) document.getElementById('btn-alist-video').click();
-            if (document.getElementById('alist-aud-path').value) document.getElementById('btn-alist-audio').click();
         }
     }
 
@@ -276,6 +372,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (res.error) throw new Error(res.error);
             if (res.code !== 200) throw new Error(res.message);
 
+            pcLibraryState.video.source = 'alist';
             videoData = {}; // Clear previous
             
             const files = res.data.content || [];
@@ -305,7 +402,7 @@ document.addEventListener('DOMContentLoaded', () => {
             renderVideoList();
             
         } catch (e) {
-            listVideo.innerHTML = `<div class="empty-state">Alist Error: ${e.message}</div>`;
+            listVideo.innerHTML = `<div class="empty-state">Alist Error: ${escapeHtml(e.message)}</div>`;
         }
     });
 
@@ -328,6 +425,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (res.error) throw new Error(res.error);
             if (res.code !== 200) throw new Error(res.message);
 
+            pcLibraryState.audio.source = 'alist';
             audioData = {}; 
             const files = res.data.content || [];
             
@@ -356,12 +454,41 @@ document.addEventListener('DOMContentLoaded', () => {
             renderAudioList();
             
         } catch (e) {
-            listAudio.innerHTML = `<div class="empty-state">Alist Error: ${e.message}</div>`;
+            listAudio.innerHTML = `<div class="empty-state">Alist Error: ${escapeHtml(e.message)}</div>`;
         }
     });
 
+    if (autoLoadAlist && currentAlistToken) {
+        pcLibrariesReady.finally(() => {
+            if (document.getElementById('alist-vid-path').value) btnAlistVideo.click();
+            if (document.getElementById('alist-aud-path').value) btnAlistAudio.click();
+        });
+    }
+
+    function renderPcDirectories(kind, container) {
+        const state = pcLibraryState[kind];
+        if (state.source !== 'pc') return 0;
+
+        for (const directory of state.directories) {
+            const div = document.createElement('div');
+            div.className = 'media-item directory-item';
+            div.innerHTML = `
+                <div class="media-icon"><i class="fa-solid fa-folder"></i></div>
+                <div class="media-info">
+                    <div class="media-title">${escapeHtml(directory.name)}</div>
+                    <div class="media-tags"><span class="tag">Folder</span></div>
+                </div>
+                <i class="fa-solid fa-chevron-right directory-chevron"></i>
+            `;
+            div.addEventListener('click', () => loadPcDirectory(kind, directory.path));
+            container.appendChild(div);
+        }
+        return state.directories.length;
+    }
+
     function renderVideoList() {
         listVideo.innerHTML = '';
+        const directoryCount = renderPcDirectories('video', listVideo);
         let count = 0;
 
         for (const [name, files] of Object.entries(videoData)) {
@@ -375,7 +502,7 @@ document.addEventListener('DOMContentLoaded', () => {
             div.innerHTML = `
                 <div class="media-icon"><i class="fa-solid fa-film"></i></div>
                 <div class="media-info">
-                    <div class="media-title">${name}</div>
+                    <div class="media-title">${escapeHtml(name)}</div>
                     <div class="media-tags">
                         <span class="tag has">Video</span>
                         <span class="tag ${hasSub ? 'has' : ''}">${hasSub ? 'CC' : 'No CC'}</span>
@@ -391,11 +518,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
             listVideo.appendChild(div);
         }
-        if (count === 0) listVideo.innerHTML = '<div class="empty-state">No videos found.</div>';
+        if (count === 0 && directoryCount === 0) {
+            listVideo.innerHTML = '<div class="empty-state">No videos found in this folder.</div>';
+        }
     }
 
     function renderAudioList() {
         listAudio.innerHTML = '';
+        const directoryCount = renderPcDirectories('audio', listAudio);
         let count = 0;
 
         for (const [name, files] of Object.entries(audioData)) {
@@ -408,7 +538,7 @@ document.addEventListener('DOMContentLoaded', () => {
             div.innerHTML = `
                 <div class="media-icon"><i class="fa-solid fa-volume-high"></i></div>
                 <div class="media-info">
-                    <div class="media-title">${name}</div>
+                    <div class="media-title">${escapeHtml(name)}</div>
                     <div class="media-tags">
                         <span class="tag has">Audio</span>
                         <span class="tag ${hasSub ? 'has' : ''}">${hasSub ? 'CC' : 'No CC'}</span>
@@ -424,7 +554,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
             listAudio.appendChild(div);
         }
-        if (count === 0) listAudio.innerHTML = '<div class="empty-state">No audios found.</div>';
+        if (count === 0 && directoryCount === 0) {
+            listAudio.innerHTML = '<div class="empty-state">No audios found in this folder.</div>';
+        }
     }
 
     let subState = 0; // 0: Off, 1: Video, 2: Audio
@@ -523,13 +655,42 @@ document.addEventListener('DOMContentLoaded', () => {
         const t = asmrAudio.currentTime;
         const activeCue = audioSubCues.find(c => t >= c.start && t <= c.end);
         if (activeCue) {
-            audioSubOverlay.innerHTML = `<span>${activeCue.text}</span>`;
+            audioSubOverlay.innerHTML = `<span>${escapeHtml(activeCue.text).replace(/\n/g, '<br>')}</span>`;
         } else {
             audioSubOverlay.innerHTML = '';
         }
     }
 
     asmrAudio.addEventListener('timeupdate', updateAudioSubOverlay);
+
+    const subtitleSizes = [
+        { key: '80', label: '80%', name: 'Small' },
+        { key: '100', label: '100%', name: 'Standard' },
+        { key: '125', label: '125%', name: 'Large' },
+        { key: '150', label: '150%', name: 'Extra large' }
+    ];
+    const savedSubtitleSize = localStorage.getItem('subtitleSize');
+    let subtitleSizeIndex = subtitleSizes.findIndex(size => size.key === savedSubtitleSize);
+    if (subtitleSizeIndex < 0) subtitleSizeIndex = 1;
+
+    function applySubtitleSize() {
+        const selected = subtitleSizes[subtitleSizeIndex];
+        for (const size of subtitleSizes) {
+            videoWrapper.classList.remove(`subtitle-size-${size.key}`);
+        }
+        videoWrapper.classList.add(`subtitle-size-${selected.key}`);
+        btnSubSize.textContent = `A ${selected.label}`;
+        btnSubSize.title = `Subtitle size: ${selected.name}`;
+        btnSubSize.setAttribute('aria-label', `Subtitle size: ${selected.label}. Activate for next size.`);
+        localStorage.setItem('subtitleSize', selected.key);
+    }
+
+    btnSubSize.addEventListener('click', () => {
+        subtitleSizeIndex = (subtitleSizeIndex + 1) % subtitleSizes.length;
+        applySubtitleSize();
+    });
+
+    applySubtitleSize();
 
     async function loadSubtitle(file, targetTrack) {
         let content = '';
@@ -647,8 +808,62 @@ document.addEventListener('DOMContentLoaded', () => {
 
     btnPlayPause.addEventListener('click', togglePlay);
     overlayPlay.addEventListener('click', togglePlay);
-    video.addEventListener('click', togglePlay);
     btnStop.addEventListener('click', stop);
+
+    // Touch gestures: one tap toggles controls, two taps toggle playback.
+    const touchDoubleTapDelay = 300;
+    let touchTapTimer = null;
+    let lastTouchTapAt = 0;
+    let suppressVideoClickUntil = 0;
+
+    function isPlayerControlTarget(target) {
+        return target instanceof Element && Boolean(target.closest(
+            '.controls-panel, .overlay-play-btn, button, input, select, a'
+        ));
+    }
+
+    function setTouchControlsVisible(visible) {
+        controlsPanel.classList.toggle('active', visible);
+        videoWrapper.classList.toggle('controls-show', visible);
+    }
+
+    function handleTouchTap(event) {
+        if (event.pointerType !== 'touch' && event.pointerType !== 'pen') return;
+        if (isPlayerControlTarget(event.target)) return;
+
+        event.preventDefault();
+        suppressVideoClickUntil = Date.now() + 600;
+        const now = performance.now();
+
+        if (lastTouchTapAt && now - lastTouchTapAt <= touchDoubleTapDelay) {
+            clearTimeout(touchTapTimer);
+            touchTapTimer = null;
+            lastTouchTapAt = 0;
+            togglePlay();
+            return;
+        }
+
+        lastTouchTapAt = now;
+        clearTimeout(touchTapTimer);
+        touchTapTimer = setTimeout(() => {
+            const controlsVisible = controlsPanel.classList.contains('active');
+            setTouchControlsVisible(!controlsVisible);
+            lastTouchTapAt = 0;
+            touchTapTimer = null;
+        }, touchDoubleTapDelay);
+    }
+
+    videoWrapper.addEventListener('pointerup', handleTouchTap);
+    videoWrapper.addEventListener('pointercancel', () => {
+        clearTimeout(touchTapTimer);
+        touchTapTimer = null;
+        lastTouchTapAt = 0;
+    });
+
+    // Preserve the original single-click play/pause behavior for mouse users.
+    video.addEventListener('click', () => {
+        if (Date.now() >= suppressVideoClickUntil) togglePlay();
+    });
 
     function updatePlayBtn() {
         btnPlayPause.innerHTML = isGlobalPlaying ? '<i class="fa-solid fa-pause"></i>' : '<i class="fa-solid fa-play"></i>';
@@ -717,22 +932,29 @@ document.addEventListener('DOMContentLoaded', () => {
         asmrAudio.currentTime = pct * asmrAudio.duration;
     }
 
-    progressBgVid.addEventListener('mousedown', (e) => {
+    progressBgVid.addEventListener('pointerdown', (e) => {
+        e.preventDefault();
         isDraggingVid = true;
         setProgressVid(e);
     });
 
-    progressBgAud.addEventListener('mousedown', (e) => {
+    progressBgAud.addEventListener('pointerdown', (e) => {
+        e.preventDefault();
         isDraggingAud = true;
         setProgressAud(e);
     });
 
-    document.addEventListener('mousemove', (e) => {
+    document.addEventListener('pointermove', (e) => {
         if (isDraggingVid) setProgressVid(e);
         if (isDraggingAud) setProgressAud(e);
     });
 
-    document.addEventListener('mouseup', () => {
+    document.addEventListener('pointerup', () => {
+        isDraggingVid = false;
+        isDraggingAud = false;
+    });
+
+    document.addEventListener('pointercancel', () => {
         isDraggingVid = false;
         isDraggingAud = false;
     });
@@ -764,6 +986,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     videoWrapper.addEventListener('mousemove', (e) => {
+        if (Date.now() < suppressVideoClickUntil) return;
         const rect = videoWrapper.getBoundingClientRect();
         const triggerY = rect.bottom - (rect.height / 3);
 

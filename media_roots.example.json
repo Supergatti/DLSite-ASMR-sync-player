@@ -1,0 +1,9 @@
+{
+  "roots": [
+    {
+      "id": "media",
+      "name": "Project Media",
+      "path": "./media"
+    }
+  ]
+}

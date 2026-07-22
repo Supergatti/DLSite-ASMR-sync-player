@@ -1,5 +1,7 @@
 /__pycache__
+/.venv-build
 /build
 /dist
+/media_roots.json
 *.spec
 icon.png
