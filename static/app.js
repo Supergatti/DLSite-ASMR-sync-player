@@ -2,19 +2,36 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Elements
     const labelVideo = document.getElementById('now-playing-video');
+    const labelImage = document.getElementById('now-playing-image');
     const labelAudio = document.getElementById('now-playing-audio');
     const video = document.getElementById('main-video');
+    const mainImage = document.getElementById('main-image');
+    const imageEmptyState = document.getElementById('image-empty-state');
     const asmrAudio = document.getElementById('asmr-audio');
     
     // Controls
-    const btnPlayPause = document.getElementById('btn-play-pause');
+    const btnVisualPlayPause = document.getElementById('btn-play-pause');
+    const btnAudioPlayPause = document.getElementById('btn-audio-play-pause');
     const btnStop = document.getElementById('btn-stop');
-    const overlayPlay = document.getElementById('overlay-play');
     const videoWrapper = document.getElementById('video-wrapper');
     const controlsPanel = document.querySelector('.controls-panel');
     const btnSub = document.getElementById('btn-sub');
     const btnSubSize = document.getElementById('btn-sub-size');
     const btnFullscreen = document.getElementById('btn-fullscreen');
+    const btnModeVideo = document.getElementById('btn-mode-video');
+    const btnModeImage = document.getElementById('btn-mode-image');
+    const slideshowControls = document.getElementById('slideshow-controls');
+    const btnImageEdgePrev = document.getElementById('btn-image-edge-prev');
+    const btnImageEdgeNext = document.getElementById('btn-image-edge-next');
+    const btnImageOrder = document.getElementById('btn-image-order');
+    const slideshowCounter = document.getElementById('slideshow-counter');
+    const imageIntervalSelect = document.getElementById('image-interval');
+    const btnImageZoom = document.getElementById('btn-image-zoom');
+    const imageZoomLabel = document.getElementById('image-zoom-label');
+    const btnSeekBack = document.getElementById('btn-seek-back');
+    const btnSeekForward = document.getElementById('btn-seek-forward');
+    const btnNextMedia = document.getElementById('btn-next-media');
+    const btnEndMode = document.getElementById('btn-end-mode');
     
     // Volumes
     const volVideo = document.getElementById('vol-video');
@@ -40,7 +57,16 @@ document.addEventListener('DOMContentLoaded', () => {
     let isDraggingAud = false;
     let currentMedia = null;
     let isGlobalPlaying = false;
-    let globalPlayInitiated = false;
+    let isVisualPlaying = false;
+    let isAudioPlaying = false;
+    let playerMode = localStorage.getItem('playerMode') === 'image' ? 'image' : 'video';
+    let mediaEndMode = ['repeat', 'next', 'stop'].includes(localStorage.getItem('mediaEndMode'))
+        ? localStorage.getItem('mediaEndMode')
+        : 'stop';
+    let currentVideoName = null;
+    let currentAudioName = null;
+
+    const IMAGE_EXTENSIONS = ['jpg', 'jpeg', 'png', 'webp', 'gif', 'avif', 'bmp'];
 
     // Default init volumes
     video.volume = volVideo.value;
@@ -77,9 +103,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Local Folder Logic ---
     const listVideo = document.getElementById('list-video');
+    const listImage = document.getElementById('list-image');
     const listAudio = document.getElementById('list-audio');
 
     let videoData = {};
+    let imageData = {};
     let audioData = {};
 
     // --- Helper: group files with subtitle matching ---
@@ -100,10 +128,13 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Browser file picker (click to browse) ---
     const btnVideoBrowse = document.getElementById('btn-video-folder');
     const inputVideo = document.getElementById('input-video-folder');
+    const btnImageBrowse = document.getElementById('btn-image-folder');
+    const inputImage = document.getElementById('input-image-folder');
     const btnAudioBrowse = document.getElementById('btn-audio-folder');
     const inputAudio = document.getElementById('input-audio-folder');
 
     btnVideoBrowse.addEventListener('click', () => inputVideo.click());
+    btnImageBrowse.addEventListener('click', () => inputImage.click());
     btnAudioBrowse.addEventListener('click', () => inputAudio.click());
 
     inputVideo.addEventListener('change', (e) => {
@@ -117,6 +148,28 @@ document.addEventListener('DOMContentLoaded', () => {
         pcLibraryState.video.source = 'device';
         videoData = matchSubtitles(videos, subs);
         renderVideoList();
+    });
+
+    inputImage.addEventListener('change', (e) => {
+        revokeImageObjectUrls();
+        const images = [];
+        for (const file of e.target.files) {
+            const ext = file.name.split('.').pop().toLowerCase();
+            if (!IMAGE_EXTENSIONS.includes(ext)) continue;
+            images.push({
+                name: file.webkitRelativePath || file.name,
+                isAlist: false,
+                url: URL.createObjectURL(file),
+                _file: file
+            });
+        }
+        images.sort((left, right) => left.name.localeCompare(right.name, undefined, {
+            numeric: true,
+            sensitivity: 'base'
+        }));
+        pcLibraryState.image.source = 'device';
+        imageData = Object.fromEntries(images.map(image => [image.name, image]));
+        renderImageList();
     });
 
     inputAudio.addEventListener('change', (e) => {
@@ -142,6 +195,14 @@ document.addEventListener('DOMContentLoaded', () => {
             list: listVideo,
             mediaExts: ['mp4', 'webm', 'mkv', 'ogg']
         },
+        image: {
+            root: document.getElementById('library-image-root'),
+            path: document.getElementById('library-image-path'),
+            up: document.getElementById('btn-library-image-up'),
+            refresh: document.getElementById('btn-library-image-refresh'),
+            list: listImage,
+            mediaExts: IMAGE_EXTENSIONS
+        },
         audio: {
             root: document.getElementById('library-audio-root'),
             path: document.getElementById('library-audio-path'),
@@ -154,6 +215,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const pcLibraryState = {
         video: { root: '', path: '', parent: null, directories: [], source: 'pc' },
+        image: { root: '', path: '', parent: null, directories: [], source: 'pc' },
         audio: { root: '', path: '', parent: null, directories: [], source: 'pc' }
     };
 
@@ -209,6 +271,10 @@ document.addEventListener('DOMContentLoaded', () => {
             if (kind === 'video') {
                 videoData = matchSubtitles(media, subtitles);
                 renderVideoList();
+            } else if (kind === 'image') {
+                revokeImageObjectUrls();
+                imageData = Object.fromEntries(media.map(image => [image.name, image]));
+                renderImageList();
             } else {
                 audioData = matchSubtitles(media, subtitles);
                 renderAudioList();
@@ -228,7 +294,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const result = await fetchJson('/api/library/roots');
             const availableRoots = (result.roots || []).filter(root => root.available);
 
-            for (const kind of ['video', 'audio']) {
+            for (const kind of ['video', 'image', 'audio']) {
                 const controls = libraryControls[kind];
                 controls.root.innerHTML = '';
                 for (const root of result.roots || []) {
@@ -256,11 +322,12 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (error) {
             const message = `<div class="empty-state">PC library error: ${escapeHtml(error.message)}</div>`;
             listVideo.innerHTML = message;
+            listImage.innerHTML = message;
             listAudio.innerHTML = message;
         }
     }
 
-    for (const kind of ['video', 'audio']) {
+    for (const kind of ['video', 'image', 'audio']) {
         const controls = libraryControls[kind];
         controls.root.addEventListener('change', () => {
             pcLibraryState[kind].root = controls.root.value;
@@ -284,6 +351,7 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Auto-fill path forms if stored
     document.getElementById('alist-vid-path').value = localStorage.getItem('alistVidPath') || '';
+    document.getElementById('alist-img-path').value = localStorage.getItem('alistImgPath') || '';
     document.getElementById('alist-aud-path').value = localStorage.getItem('alistAudPath') || '';
 
     const btnAlistConfig = document.getElementById('btn-alist-config');
@@ -351,6 +419,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     const btnAlistVideo = document.getElementById('btn-alist-video');
+    const btnAlistImage = document.getElementById('btn-alist-image');
     const btnAlistAudio = document.getElementById('btn-alist-audio');
 
     btnAlistVideo.addEventListener('click', async () => {
@@ -403,6 +472,46 @@ document.addEventListener('DOMContentLoaded', () => {
             
         } catch (e) {
             listVideo.innerHTML = `<div class="empty-state">Alist Error: ${escapeHtml(e.message)}</div>`;
+        }
+    });
+
+    btnAlistImage.addEventListener('click', async () => {
+        const baseUrl = currentAlistBaseUrl;
+        const token = currentAlistToken;
+        const targetPath = document.getElementById('alist-img-path').value;
+        if (document.getElementById('modal-alist-remember').checked) {
+            localStorage.setItem('alistImgPath', targetPath);
+        }
+
+        listImage.innerHTML = '<div class="loading">Loading AList...</div>';
+        try {
+            const req = await fetch('/api/alist/list', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ base_url: baseUrl, path: targetPath, token })
+            });
+            const res = await req.json();
+            if (res.error) throw new Error(res.error);
+            if (res.code !== 200) throw new Error(res.message);
+
+            pcLibraryState.image.source = 'alist';
+            revokeImageObjectUrls();
+            imageData = {};
+            const files = res.data.content || [];
+
+            for (const file of files) {
+                if (file.is_dir) continue;
+                const ext = file.name.split('.').pop().toLowerCase();
+                if (!IMAGE_EXTENSIONS.includes(ext)) continue;
+
+                const cleanPath = targetPath.endsWith('/') ? targetPath : `${targetPath}/`;
+                let fileUrl = `${baseUrl.replace(/\/$/, '')}/d${cleanPath}${encodeURIComponent(file.name)}`;
+                if (file.sign) fileUrl += `?sign=${file.sign}`;
+                imageData[file.name] = { name: file.name, isAlist: true, url: fileUrl };
+            }
+            renderImageList();
+        } catch (e) {
+            listImage.innerHTML = `<div class="empty-state">Alist Error: ${escapeHtml(e.message)}</div>`;
         }
     });
 
@@ -461,6 +570,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (autoLoadAlist && currentAlistToken) {
         pcLibrariesReady.finally(() => {
             if (document.getElementById('alist-vid-path').value) btnAlistVideo.click();
+            if (document.getElementById('alist-img-path').value) btnAlistImage.click();
             if (document.getElementById('alist-aud-path').value) btnAlistAudio.click();
         });
     }
@@ -491,9 +601,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const directoryCount = renderPcDirectories('video', listVideo);
         let count = 0;
 
-        for (const [name, files] of Object.entries(videoData)) {
-            if (!files.video) continue;
-
+        for (const [name, files] of playableMediaEntries('video')) {
             count++;
             const div = document.createElement('div');
             div.className = 'media-item';
@@ -523,13 +631,445 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    const storedImageInterval = Number.parseInt(localStorage.getItem('imageIntervalSeconds'), 10);
+    let imageIntervalSeconds = [3, 5, 10, 15, 30].includes(storedImageInterval)
+        ? storedImageInterval
+        : 5;
+    let imageOrderMode = localStorage.getItem('imageOrderMode') === 'random'
+        ? 'random'
+        : 'sequential';
+    let imagePlaylist = [];
+    let imagePlaybackOrder = [];
+    let currentImage = null;
+    let slideshowAnchorStep = 0;
+    let slideshowAnchorOrderIndex = 0;
+    let standaloneElapsedSeconds = 0;
+    let standaloneStartedAt = null;
+    let slideshowFrameId = null;
+    let imageZoom = 1;
+    let imagePanX = 0;
+    let imagePanY = 0;
+    let imageGesture = null;
+    let suppressTouchControlsUntil = 0;
+    const activeImagePointers = new Map();
+    const MIN_IMAGE_ZOOM = 1;
+    const MAX_IMAGE_ZOOM = 4;
+    const IMAGE_SWIPE_THRESHOLD = 50;
+
+    function mediaHasSource(element) {
+        return Boolean(element.getAttribute('src'));
+    }
+
+    function sameImage(left, right) {
+        return Boolean(left && right && left.url === right.url && left.name === right.name);
+    }
+
+    function shuffleImages(images) {
+        const shuffled = [...images];
+        for (let index = shuffled.length - 1; index > 0; index--) {
+            const swapIndex = Math.floor(Math.random() * (index + 1));
+            [shuffled[index], shuffled[swapIndex]] = [shuffled[swapIndex], shuffled[index]];
+        }
+        return shuffled;
+    }
+
+    function positiveModulo(value, divisor) {
+        return ((value % divisor) + divisor) % divisor;
+    }
+
+    function setImageEmptyMessage(message) {
+        const messageElement = imageEmptyState.querySelector('span');
+        if (messageElement) messageElement.textContent = message;
+    }
+
+    function clearCurrentImage(message = 'Select an image folder to start the slideshow') {
+        currentImage = null;
+        resetImageView();
+        mainImage.hidden = true;
+        btnImageEdgePrev.hidden = true;
+        btnImageEdgeNext.hidden = true;
+        mainImage.removeAttribute('src');
+        mainImage.alt = '';
+        labelImage.textContent = 'Image: None';
+        labelImage.removeAttribute('title');
+        setImageEmptyMessage(message);
+        updateActiveImageItem();
+        updateSlideshowCounter();
+    }
+
+    function revokeImageObjectUrls() {
+        let revokedCurrent = false;
+        for (const image of Object.values(imageData)) {
+            if (!image.url?.startsWith('blob:')) continue;
+            if (sameImage(image, currentImage)) revokedCurrent = true;
+            URL.revokeObjectURL(image.url);
+        }
+        if (revokedCurrent) clearCurrentImage();
+    }
+
+    function updateActiveImageItem() {
+        listImage.querySelectorAll('.media-item').forEach(item => {
+            item.classList.toggle('active', sameImage(item._imageItem, currentImage));
+        });
+    }
+
+    function getSlideshowClockSeconds() {
+        if (standaloneStartedAt !== null && isVisualPlaying) {
+            return standaloneElapsedSeconds + (performance.now() - standaloneStartedAt) / 1000;
+        }
+        return standaloneElapsedSeconds;
+    }
+
+    function startStandaloneClock() {
+        if (standaloneStartedAt === null) standaloneStartedAt = performance.now();
+    }
+
+    function pauseStandaloneClock() {
+        if (standaloneStartedAt === null) return;
+        standaloneElapsedSeconds += (performance.now() - standaloneStartedAt) / 1000;
+        standaloneStartedAt = null;
+    }
+
+    function resetStandaloneClock() {
+        standaloneElapsedSeconds = 0;
+        standaloneStartedAt = isVisualPlaying && playerMode === 'image' ? performance.now() : null;
+    }
+
+    function slideshowStep() {
+        return Math.floor(getSlideshowClockSeconds() / imageIntervalSeconds);
+    }
+
+    function updateSlideshowCounter() {
+        if (!currentImage || imagePlaybackOrder.length === 0) {
+            slideshowCounter.textContent = `0 / ${imagePlaybackOrder.length}`;
+            return;
+        }
+        const currentIndex = imagePlaybackOrder.findIndex(image => sameImage(image, currentImage));
+        slideshowCounter.textContent = `${currentIndex + 1} / ${imagePlaybackOrder.length}`;
+    }
+
+    function clampImagePan() {
+        if (imageZoom <= 1) {
+            imagePanX = 0;
+            imagePanY = 0;
+            return;
+        }
+        const maxPanX = (videoWrapper.clientWidth * (imageZoom - 1)) / 2;
+        const maxPanY = (videoWrapper.clientHeight * (imageZoom - 1)) / 2;
+        imagePanX = Math.max(-maxPanX, Math.min(imagePanX, maxPanX));
+        imagePanY = Math.max(-maxPanY, Math.min(imagePanY, maxPanY));
+    }
+
+    function applyImageTransform() {
+        clampImagePan();
+        mainImage.style.transform = `translate3d(${imagePanX}px, ${imagePanY}px, 0) scale(${imageZoom})`;
+        const zoomPercent = Math.round(imageZoom * 100);
+        imageZoomLabel.textContent = `${zoomPercent}%`;
+        btnImageZoom.title = `Image zoom: ${zoomPercent}%. Click to change.`;
+        btnImageZoom.setAttribute('aria-label', `Image zoom: ${zoomPercent} percent. Click to change.`);
+        videoWrapper.classList.toggle('image-zoomed', imageZoom > 1.01);
+    }
+
+    function setImageZoom(nextZoom) {
+        imageZoom = Math.max(MIN_IMAGE_ZOOM, Math.min(nextZoom, MAX_IMAGE_ZOOM));
+        if (imageZoom <= MIN_IMAGE_ZOOM) {
+            imageZoom = MIN_IMAGE_ZOOM;
+            imagePanX = 0;
+            imagePanY = 0;
+        }
+        applyImageTransform();
+    }
+
+    function resetImageView() {
+        imageZoom = MIN_IMAGE_ZOOM;
+        imagePanX = 0;
+        imagePanY = 0;
+        applyImageTransform();
+    }
+
+    function cycleImageZoom() {
+        const zoomSteps = [1, 1.5, 2, 3, 4];
+        const nextZoom = zoomSteps.find(zoom => zoom > imageZoom + 0.01) || zoomSteps[0];
+        setImageZoom(nextZoom);
+    }
+
+    function displayImage(image) {
+        if (!image) return;
+        if (!sameImage(image, currentImage)) resetImageView();
+        currentImage = image;
+        mainImage.hidden = false;
+        btnImageEdgePrev.hidden = false;
+        btnImageEdgeNext.hidden = false;
+        mainImage.src = image.url;
+        mainImage.alt = image.name;
+        labelImage.textContent = `Image: ${image.name}`;
+        labelImage.title = image.name;
+        updateActiveImageItem();
+        updateSlideshowCounter();
+    }
+
+    function reanchorSlideshow() {
+        slideshowAnchorStep = slideshowStep();
+        const currentIndex = imagePlaybackOrder.findIndex(image => sameImage(image, currentImage));
+        slideshowAnchorOrderIndex = currentIndex >= 0 ? currentIndex : 0;
+    }
+
+    function rebuildImagePlaybackOrder() {
+        imagePlaybackOrder = imageOrderMode === 'random'
+            ? shuffleImages(imagePlaylist)
+            : [...imagePlaylist];
+
+        if (currentImage && !imagePlaylist.some(image => sameImage(image, currentImage))) {
+            clearCurrentImage('Select an image to start the slideshow');
+        }
+        reanchorSlideshow();
+        updateSlideshowCounter();
+    }
+
+    function updateSlideshowFromClock() {
+        if (playerMode !== 'image' || imagePlaybackOrder.length === 0) return;
+        if (!isVisualPlaying) return;
+        if (!currentImage) {
+            displayImage(imagePlaybackOrder[0]);
+            reanchorSlideshow();
+            return;
+        }
+
+        const stepOffset = slideshowStep() - slideshowAnchorStep;
+        const targetIndex = positiveModulo(
+            slideshowAnchorOrderIndex + stepOffset,
+            imagePlaybackOrder.length
+        );
+        const targetImage = imagePlaybackOrder[targetIndex];
+        if (!sameImage(targetImage, currentImage)) displayImage(targetImage);
+    }
+
+    function requestSlideshowFrame() {
+        if (slideshowFrameId !== null) return;
+        slideshowFrameId = requestAnimationFrame(function tick() {
+            slideshowFrameId = null;
+            if (playerMode !== 'image' || !isVisualPlaying) return;
+            updateSlideshowFromClock();
+            slideshowFrameId = requestAnimationFrame(tick);
+        });
+    }
+
+    function moveSlideshow(direction) {
+        if (imagePlaybackOrder.length === 0) return;
+        const currentIndex = imagePlaybackOrder.findIndex(image => sameImage(image, currentImage));
+        const baseIndex = currentIndex >= 0 ? currentIndex : 0;
+        const targetIndex = positiveModulo(baseIndex + direction, imagePlaybackOrder.length);
+        displayImage(imagePlaybackOrder[targetIndex]);
+        reanchorSlideshow();
+    }
+
+    function imagePointerDistance() {
+        const points = [...activeImagePointers.values()];
+        if (points.length < 2) return 0;
+        return Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y);
+    }
+
+    function beginImagePointerGesture(event) {
+        if (playerMode !== 'image' || mainImage.hidden || isPlayerControlTarget(event.target)) return;
+        if (event.pointerType === 'mouse' && (event.button !== 0 || imageZoom <= 1)) return;
+        if (!['touch', 'pen', 'mouse'].includes(event.pointerType)) return;
+
+        activeImagePointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+        if (activeImagePointers.size === 1) {
+            imageGesture = {
+                pointerId: event.pointerId,
+                startX: event.clientX,
+                startY: event.clientY,
+                startPanX: imagePanX,
+                startPanY: imagePanY,
+                moved: false,
+                pinching: false
+            };
+        } else if (activeImagePointers.size === 2) {
+            imageGesture = {
+                pinching: true,
+                startDistance: imagePointerDistance(),
+                startZoom: imageZoom,
+                moved: true
+            };
+            suppressTouchControlsUntil = Date.now() + 500;
+        }
+
+        if (videoWrapper.setPointerCapture) {
+            try {
+                videoWrapper.setPointerCapture(event.pointerId);
+            } catch (_) {
+                // Pointer capture may be unavailable after a rapid multi-touch transition.
+            }
+        }
+        event.preventDefault();
+    }
+
+    function updateImagePointerGesture(event) {
+        if (!activeImagePointers.has(event.pointerId) || !imageGesture) return;
+        activeImagePointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+
+        if (activeImagePointers.size >= 2 && imageGesture.pinching) {
+            const distance = imagePointerDistance();
+            if (imageGesture.startDistance > 0) {
+                setImageZoom(imageGesture.startZoom * distance / imageGesture.startDistance);
+            }
+            suppressTouchControlsUntil = Date.now() + 500;
+            event.preventDefault();
+            return;
+        }
+
+        if (activeImagePointers.size !== 1 || imageGesture.pinching) return;
+        const deltaX = event.clientX - imageGesture.startX;
+        const deltaY = event.clientY - imageGesture.startY;
+
+        if (imageZoom > 1) {
+            imagePanX = imageGesture.startPanX + deltaX;
+            imagePanY = imageGesture.startPanY + deltaY;
+            imageGesture.moved = imageGesture.moved
+                || Math.abs(deltaX) > 4
+                || Math.abs(deltaY) > 4;
+            applyImageTransform();
+            if (imageGesture.moved) suppressTouchControlsUntil = Date.now() + 500;
+            event.preventDefault();
+        } else if (Math.abs(deltaX) > 8 && Math.abs(deltaX) > Math.abs(deltaY)) {
+            imageGesture.moved = true;
+            event.preventDefault();
+        }
+    }
+
+    function finishImagePointerGesture(event) {
+        if (!activeImagePointers.has(event.pointerId) || !imageGesture) return;
+        const finishingGesture = imageGesture;
+        const deltaX = event.clientX - (finishingGesture.startX ?? event.clientX);
+        const deltaY = event.clientY - (finishingGesture.startY ?? event.clientY);
+        const wasSinglePointerGesture = activeImagePointers.size === 1 && !finishingGesture.pinching;
+
+        if (wasSinglePointerGesture
+            && imageZoom <= 1
+            && Math.abs(deltaX) >= IMAGE_SWIPE_THRESHOLD
+            && Math.abs(deltaX) > Math.abs(deltaY)) {
+            moveSlideshow(deltaX < 0 ? 1 : -1);
+            suppressTouchControlsUntil = Date.now() + 500;
+        } else if (finishingGesture.moved || finishingGesture.pinching) {
+            suppressTouchControlsUntil = Date.now() + 500;
+        }
+
+        activeImagePointers.delete(event.pointerId);
+        if (activeImagePointers.size === 1) {
+            const [pointerId, point] = activeImagePointers.entries().next().value;
+            imageGesture = {
+                pointerId,
+                startX: point.x,
+                startY: point.y,
+                startPanX: imagePanX,
+                startPanY: imagePanY,
+                moved: true,
+                pinching: false
+            };
+        } else if (activeImagePointers.size === 0) {
+            imageGesture = null;
+        }
+    }
+
+    function cancelImagePointerGesture(event) {
+        activeImagePointers.delete(event.pointerId);
+        if (activeImagePointers.size === 0) imageGesture = null;
+        suppressTouchControlsUntil = Date.now() + 300;
+    }
+
+    function updateImageOrderButton() {
+        const random = imageOrderMode === 'random';
+        btnImageOrder.classList.toggle('active', random);
+        btnImageOrder.setAttribute('aria-pressed', String(random));
+        btnImageOrder.title = `Playback order: ${random ? 'random' : 'sequential'}`;
+        btnImageOrder.innerHTML = random
+            ? '<i class="fa-solid fa-shuffle"></i><span>Random</span>'
+            : '<i class="fa-solid fa-arrow-down-1-9"></i><span>Sequential</span>';
+    }
+
+    function applyPlayerMode() {
+        const imageMode = playerMode === 'image';
+        const visualAvailable = imageMode
+            ? Boolean(currentImage || imagePlaybackOrder.length > 0)
+            : mediaHasSource(video);
+        if (!visualAvailable) isVisualPlaying = false;
+        videoWrapper.classList.toggle('image-mode', imageMode);
+        videoWrapper.classList.toggle('video-mode', !imageMode);
+        btnModeVideo.classList.toggle('active', !imageMode);
+        btnModeImage.classList.toggle('active', imageMode);
+        btnModeVideo.setAttribute('aria-pressed', String(!imageMode));
+        btnModeImage.setAttribute('aria-pressed', String(imageMode));
+        slideshowControls.hidden = !imageMode;
+
+        if (imageMode) {
+            if (!currentImage && imagePlaybackOrder.length > 0) {
+                displayImage(imagePlaybackOrder[0]);
+                reanchorSlideshow();
+            }
+            video.pause();
+            if (subState === 1) subState = 2;
+            if (isVisualPlaying) {
+                startStandaloneClock();
+                requestSlideshowFrame();
+            }
+        } else {
+            pauseStandaloneClock();
+            if (isVisualPlaying && mediaHasSource(video)) video.play().catch(() => {});
+        }
+        applySubtitleState();
+        syncGlobalPlaybackState();
+    }
+
+    function setPlayerMode(mode) {
+        if (!['video', 'image'].includes(mode)) return;
+        playerMode = mode;
+        localStorage.setItem('playerMode', playerMode);
+        applyPlayerMode();
+        showControls();
+    }
+
+    function loadImageSequence(name, image) {
+        displayImage(image);
+        reanchorSlideshow();
+        setPlayerMode('image');
+
+        setVisualPlayback(true);
+    }
+
+    function renderImageList() {
+        listImage.innerHTML = '';
+        const directoryCount = renderPcDirectories('image', listImage);
+        imagePlaylist = Object.values(imageData);
+        rebuildImagePlaybackOrder();
+
+        for (const [name, image] of Object.entries(imageData)) {
+            const div = document.createElement('div');
+            div.className = 'media-item';
+            div._imageItem = image;
+            div.innerHTML = `
+                <div class="media-icon"><i class="fa-regular fa-image"></i></div>
+                <div class="media-info">
+                    <div class="media-title">${escapeHtml(name)}</div>
+                    <div class="media-tags"><span class="tag has">Image</span></div>
+                </div>
+            `;
+            div.classList.toggle('active', sameImage(image, currentImage));
+            div.addEventListener('click', () => loadImageSequence(name, image));
+            listImage.appendChild(div);
+        }
+
+        if (imagePlaylist.length === 0 && directoryCount === 0) {
+            listImage.innerHTML = '<div class="empty-state">No images found in this folder.</div>';
+        }
+    }
+
     function renderAudioList() {
         listAudio.innerHTML = '';
         const directoryCount = renderPcDirectories('audio', listAudio);
         let count = 0;
 
-        for (const [name, files] of Object.entries(audioData)) {
-            if (!files.audio) continue;
+        for (const [name, files] of playableMediaEntries('audio')) {
             count++;
             const div = document.createElement('div');
             div.className = 'media-item';
@@ -565,6 +1105,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const audioSubOverlay = document.getElementById('audio-sub-overlay');
 
     function loadVideoSequence(name, files) {
+        setPlayerMode('video');
+        currentVideoName = name;
         labelVideo.textContent = `Video: ${name}`;
         labelVideo.title = name;
 
@@ -580,17 +1122,11 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         
         video.load();
-        
-        isGlobalPlaying = true;
-        globalPlayInitiated = true;
-        video.play().catch(e=>console.log(e));
-        if(asmrAudio.src && !asmrAudio.src.endsWith(window.location.host + '/')) asmrAudio.play().catch(e=>console.log(e));
-        
-        overlayPlay.classList.remove('show');
-        updatePlayBtn();
+        setVisualPlayback(true);
     }
 
     function loadAudioSequence(name, files) {
+        currentAudioName = name;
         labelAudio.textContent = `Audio: ${name}`;
         labelAudio.title = name;
 
@@ -605,14 +1141,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         asmrAudio.load();
-        
-        isGlobalPlaying = true;
-        globalPlayInitiated = true;
-        asmrAudio.play().catch(e=>console.log(e));
-        if(video.src && !video.src.endsWith(window.location.host + '/')) video.play().catch(e=>console.log(e));
-        
-        overlayPlay.classList.remove('show');
-        updatePlayBtn();
+        setAudioPlayback(true);
     }
 
     function parseVTTCues(text) {
@@ -744,7 +1273,7 @@ document.addEventListener('DOMContentLoaded', () => {
             newTrack.src = url;
             video.appendChild(newTrack);
             trackVideoParams = newTrack;
-            newTrack.track.mode = (subState === 1) ? 'showing' : 'hidden';
+            newTrack.track.mode = (subState === 1 && playerMode === 'video') ? 'showing' : 'hidden';
         } else {
             // For audio: parse cues and render via custom overlay
             audioSubCues = parseVTTCues(parsed);
@@ -757,15 +1286,13 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Core Playback Sync Logic ---
 
     // Subtitle toggling
-    btnSub.addEventListener('click', () => {
-        subState = (subState + 1) % 3;
-        
+    function applySubtitleState() {
         // Hide all native video tracks
         for (let t of video.textTracks) { t.mode = 'hidden'; }
         // Clear audio overlay
         audioSubOverlay.innerHTML = '';
 
-        if (subState === 1) {
+        if (subState === 1 && playerMode === 'video') {
             if (trackVideoParams && trackVideoParams.track) trackVideoParams.track.mode = 'showing';
             btnSub.textContent = 'CC: VID';
         } else if (subState === 2) {
@@ -777,48 +1304,270 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         btnSub.classList.toggle('active', subState !== 0);
+    }
+
+    btnSub.addEventListener('click', () => {
+        if (playerMode === 'image') {
+            subState = subState === 2 ? 0 : 2;
+        } else {
+            subState = (subState + 1) % 3;
+        }
+        applySubtitleState();
     });
+
+    btnModeVideo.addEventListener('click', () => setPlayerMode('video'));
+    btnModeImage.addEventListener('click', () => setPlayerMode('image'));
+    btnImageEdgePrev.addEventListener('click', () => moveSlideshow(-1));
+    btnImageEdgeNext.addEventListener('click', () => moveSlideshow(1));
+    btnImageZoom.addEventListener('click', cycleImageZoom);
+
+    videoWrapper.addEventListener('pointerdown', beginImagePointerGesture);
+    videoWrapper.addEventListener('pointermove', updateImagePointerGesture);
+    videoWrapper.addEventListener('pointerup', finishImagePointerGesture);
+    videoWrapper.addEventListener('pointercancel', cancelImagePointerGesture);
+
+    mainImage.addEventListener('wheel', (event) => {
+        if (playerMode !== 'image') return;
+        event.preventDefault();
+        setImageZoom(imageZoom + (event.deltaY < 0 ? 0.25 : -0.25));
+    }, { passive: false });
+
+    mainImage.addEventListener('dblclick', (event) => {
+        if (playerMode !== 'image') return;
+        event.preventDefault();
+        setImageZoom(imageZoom > 1 ? 1 : 2);
+        suppressTouchControlsUntil = Date.now() + 500;
+    });
+
+    window.addEventListener('resize', applyImageTransform);
+
+    btnImageOrder.addEventListener('click', () => {
+        imageOrderMode = imageOrderMode === 'sequential' ? 'random' : 'sequential';
+        localStorage.setItem('imageOrderMode', imageOrderMode);
+        rebuildImagePlaybackOrder();
+        updateImageOrderButton();
+        updateSlideshowFromClock();
+    });
+
+    imageIntervalSelect.value = String(imageIntervalSeconds);
+    imageIntervalSelect.addEventListener('change', () => {
+        const requestedInterval = Number.parseInt(imageIntervalSelect.value, 10);
+        if (![3, 5, 10, 15, 30].includes(requestedInterval)) return;
+        imageIntervalSeconds = requestedInterval;
+        localStorage.setItem('imageIntervalSeconds', String(imageIntervalSeconds));
+        reanchorSlideshow();
+    });
+
+    mainImage.addEventListener('error', () => {
+        mainImage.hidden = true;
+        setImageEmptyMessage(`Unable to display ${currentImage?.name || 'this image'}`);
+    });
+
+    function playableMediaEntries(kind) {
+        const source = kind === 'video' ? videoData : audioData;
+        return Object.entries(source)
+            .filter(([, files]) => Boolean(files[kind]))
+            .sort(([leftName], [rightName]) => leftName.localeCompare(rightName, undefined, {
+                numeric: true,
+                sensitivity: 'base'
+            }));
+    }
+
+    function advanceMediaKind(kind, direction = 1) {
+        const entries = playableMediaEntries(kind);
+        if (entries.length === 0) return false;
+
+        const currentName = kind === 'video' ? currentVideoName : currentAudioName;
+        const currentIndex = entries.findIndex(([name]) => name === currentName);
+        const targetIndex = currentIndex < 0
+            ? (direction >= 0 ? 0 : entries.length - 1)
+            : positiveModulo(currentIndex + direction, entries.length);
+        const [name, files] = entries[targetIndex];
+
+        if (kind === 'video') loadVideoSequence(name, files);
+        else loadAudioSequence(name, files);
+        return true;
+    }
+
+    function advanceCurrentMediaGroup() {
+        let advanced = false;
+        if (playerMode === 'image') {
+            advanced = advanceMediaKind('audio', 1);
+        } else {
+            const hasVideoSelection = mediaHasSource(video) || currentVideoName !== null;
+            const hasAudioSelection = mediaHasSource(asmrAudio) || currentAudioName !== null;
+            if (hasVideoSelection) advanced = advanceMediaKind('video', 1) || advanced;
+            if (hasAudioSelection) advanced = advanceMediaKind('audio', 1) || advanced;
+            if (!hasVideoSelection && !hasAudioSelection) {
+                advanced = advanceMediaKind('video', 1) || advanceMediaKind('audio', 1);
+            }
+        }
+        if (advanced) showControls();
+    }
+
+    function seekMediaElement(element, deltaSeconds) {
+        if (!mediaHasSource(element)) return;
+        const wasEnded = element.ended;
+        const duration = Number.isFinite(element.duration) ? element.duration : Infinity;
+        const target = Math.max(0, Math.min(element.currentTime + deltaSeconds, duration));
+        element.currentTime = target;
+        const componentWasPlaying = element === video ? isVisualPlaying : isAudioPlaying;
+        if (componentWasPlaying && wasEnded && target < duration) {
+            element.play().catch(() => {});
+        }
+    }
+
+    function seekCurrentPlayback(deltaSeconds) {
+        if (playerMode === 'video') {
+            seekMediaElement(video, deltaSeconds);
+            updateTimelineVid();
+        }
+        seekMediaElement(asmrAudio, deltaSeconds);
+        updateTimelineAud();
+        showControls();
+    }
+
+    function updateMediaEndModeButton() {
+        const modes = {
+            repeat: {
+                icon: 'fa-repeat',
+                label: 'Loop',
+                title: 'After playback: repeat current file'
+            },
+            next: {
+                icon: 'fa-forward-step',
+                label: 'Auto next',
+                title: 'After playback: automatically play next file'
+            },
+            stop: {
+                icon: 'fa-stop',
+                label: 'Stop',
+                title: 'After playback: stop'
+            }
+        };
+        const selected = modes[mediaEndMode];
+        btnEndMode.innerHTML = `<i class="fa-solid ${selected.icon}"></i><span>${selected.label}</span>`;
+        btnEndMode.title = selected.title;
+        btnEndMode.setAttribute('aria-label', `${selected.title}. Activate for next mode.`);
+    }
+
+    function cycleMediaEndMode() {
+        const modes = ['repeat', 'next', 'stop'];
+        mediaEndMode = modes[(modes.indexOf(mediaEndMode) + 1) % modes.length];
+        localStorage.setItem('mediaEndMode', mediaEndMode);
+        updateMediaEndModeButton();
+    }
+
+    function replayEndedMedia(kind) {
+        const element = kind === 'video' ? video : asmrAudio;
+        if (!mediaHasSource(element)) return;
+        element.currentTime = 0;
+        const componentIsPlaying = kind === 'video' ? isVisualPlaying : isAudioPlaying;
+        if (componentIsPlaying) element.play().catch(() => {});
+    }
+
+    function handleMediaEnded(kind) {
+        if (kind === 'video' && playerMode !== 'video') return;
+        if (mediaEndMode === 'repeat') {
+            replayEndedMedia(kind);
+            return;
+        }
+        if (mediaEndMode === 'next' && advanceMediaKind(kind, 1)) return;
+
+        if (kind === 'video') {
+            isVisualPlaying = false;
+        } else {
+            isAudioPlaying = false;
+        }
+        syncGlobalPlaybackState();
+    }
+
+    btnSeekBack.addEventListener('click', () => seekCurrentPlayback(-10));
+    btnSeekForward.addEventListener('click', () => seekCurrentPlayback(10));
+    btnNextMedia.addEventListener('click', advanceCurrentMediaGroup);
+    btnEndMode.addEventListener('click', cycleMediaEndMode);
 
     
     // --- UI Controls ---
 
-    function togglePlay() {
-        isGlobalPlaying = !isGlobalPlaying;
-        globalPlayInitiated = true;
-        
-        if (isGlobalPlaying) {
-            if (video.src && !video.src.endsWith(window.location.host + '/')) video.play().catch(()=>{});
-            if (asmrAudio.src && !asmrAudio.src.endsWith(window.location.host + '/')) asmrAudio.play().catch(()=>{});
-            overlayPlay.classList.remove('show');
+    function syncGlobalPlaybackState() {
+        isGlobalPlaying = isVisualPlaying || isAudioPlaying;
+        updatePlayButtons();
+    }
+
+    function setVisualPlayback(shouldPlay) {
+        const wasVisualPlaying = isVisualPlaying;
+        const hasVisual = playerMode === 'video'
+            ? mediaHasSource(video)
+            : Boolean(currentImage || imagePlaybackOrder.length > 0);
+        isVisualPlaying = shouldPlay && hasVisual;
+
+        if (playerMode === 'video') {
+            pauseStandaloneClock();
+            if (mediaHasSource(video)) {
+                if (isVisualPlaying) {
+                    if (video.ended) video.currentTime = 0;
+                    video.play().catch(() => {});
+                } else {
+                    video.pause();
+                }
+            }
         } else {
-            if (video.src) video.pause();
-            if (asmrAudio.src) asmrAudio.pause();
-            overlayPlay.classList.add('show');
+            video.pause();
+            if (isVisualPlaying) {
+                startStandaloneClock();
+                if (!wasVisualPlaying) reanchorSlideshow();
+                updateSlideshowFromClock();
+                requestSlideshowFrame();
+            } else {
+                pauseStandaloneClock();
+            }
         }
-        updatePlayBtn();
+        syncGlobalPlaybackState();
+    }
+
+    function setAudioPlayback(shouldPlay) {
+        isAudioPlaying = shouldPlay && mediaHasSource(asmrAudio);
+        if (mediaHasSource(asmrAudio)) {
+            if (isAudioPlaying) {
+                if (asmrAudio.ended) asmrAudio.currentTime = 0;
+                asmrAudio.play().catch(() => {});
+            } else {
+                asmrAudio.pause();
+            }
+        }
+        syncGlobalPlaybackState();
+    }
+
+    function toggleVisualPlayback() {
+        setVisualPlayback(!isVisualPlaying);
+        showControls();
+    }
+
+    function toggleAudioPlayback() {
+        setAudioPlayback(!isAudioPlaying);
+        showControls();
     }
 
     function stop() {
-        isGlobalPlaying = false;
-        if (video.src) { video.pause(); video.currentTime = 0; }
-        if (asmrAudio.src) { asmrAudio.pause(); asmrAudio.currentTime = 0; }
-        updatePlayBtn();
-        overlayPlay.classList.add('show');
+        isVisualPlaying = false;
+        isAudioPlaying = false;
+        if (mediaHasSource(video)) { video.pause(); video.currentTime = 0; }
+        if (mediaHasSource(asmrAudio)) { asmrAudio.pause(); asmrAudio.currentTime = 0; }
+        pauseStandaloneClock();
+        resetStandaloneClock();
+        reanchorSlideshow();
+        updateSlideshowFromClock();
+        syncGlobalPlaybackState();
     }
 
-    btnPlayPause.addEventListener('click', togglePlay);
-    overlayPlay.addEventListener('click', togglePlay);
+    btnVisualPlayPause.addEventListener('click', toggleVisualPlayback);
+    btnAudioPlayPause.addEventListener('click', toggleAudioPlayback);
     btnStop.addEventListener('click', stop);
-
-    // Touch gestures: one tap toggles controls, two taps toggle playback.
-    const touchDoubleTapDelay = 300;
-    let touchTapTimer = null;
-    let lastTouchTapAt = 0;
-    let suppressVideoClickUntil = 0;
 
     function isPlayerControlTarget(target) {
         return target instanceof Element && Boolean(target.closest(
-            '.controls-panel, .overlay-play-btn, button, input, select, a'
+            '.controls-panel, button, input, select, a'
         ));
     }
 
@@ -830,43 +1579,37 @@ document.addEventListener('DOMContentLoaded', () => {
     function handleTouchTap(event) {
         if (event.pointerType !== 'touch' && event.pointerType !== 'pen') return;
         if (isPlayerControlTarget(event.target)) return;
+        if (Date.now() < suppressTouchControlsUntil) return;
 
         event.preventDefault();
-        suppressVideoClickUntil = Date.now() + 600;
-        const now = performance.now();
-
-        if (lastTouchTapAt && now - lastTouchTapAt <= touchDoubleTapDelay) {
-            clearTimeout(touchTapTimer);
-            touchTapTimer = null;
-            lastTouchTapAt = 0;
-            togglePlay();
-            return;
-        }
-
-        lastTouchTapAt = now;
-        clearTimeout(touchTapTimer);
-        touchTapTimer = setTimeout(() => {
-            const controlsVisible = controlsPanel.classList.contains('active');
-            setTouchControlsVisible(!controlsVisible);
-            lastTouchTapAt = 0;
-            touchTapTimer = null;
-        }, touchDoubleTapDelay);
+        const controlsVisible = controlsPanel.classList.contains('active');
+        setTouchControlsVisible(!controlsVisible);
     }
 
     videoWrapper.addEventListener('pointerup', handleTouchTap);
-    videoWrapper.addEventListener('pointercancel', () => {
-        clearTimeout(touchTapTimer);
-        touchTapTimer = null;
-        lastTouchTapAt = 0;
-    });
 
-    // Preserve the original single-click play/pause behavior for mouse users.
-    video.addEventListener('click', () => {
-        if (Date.now() >= suppressVideoClickUntil) togglePlay();
-    });
+    function updatePlayButtons() {
+        const visualLabel = playerMode === 'image' ? 'image slideshow' : 'video';
+        const visualAction = isVisualPlaying ? 'Pause' : 'Play';
+        const visualIcon = isVisualPlaying ? 'fa-pause' : 'fa-play';
+        const visualBadge = playerMode === 'image' ? 'fa-images' : 'fa-video';
+        btnVisualPlayPause.innerHTML = `
+            <i class="fa-solid ${visualIcon}"></i>
+            <span class="component-badge"><i class="fa-solid ${visualBadge}"></i></span>
+        `;
+        btnVisualPlayPause.title = `${visualAction} ${visualLabel}`;
+        btnVisualPlayPause.setAttribute('aria-label', `${visualAction} ${visualLabel}`);
+        btnVisualPlayPause.classList.toggle('active', isVisualPlaying);
 
-    function updatePlayBtn() {
-        btnPlayPause.innerHTML = isGlobalPlaying ? '<i class="fa-solid fa-pause"></i>' : '<i class="fa-solid fa-play"></i>';
+        const audioAction = isAudioPlaying ? 'Pause' : 'Play';
+        const audioIcon = isAudioPlaying ? 'fa-pause' : 'fa-play';
+        btnAudioPlayPause.innerHTML = `
+            <i class="fa-solid ${audioIcon}"></i>
+            <span class="component-badge"><i class="fa-solid fa-microphone"></i></span>
+        `;
+        btnAudioPlayPause.title = `${audioAction} audio`;
+        btnAudioPlayPause.setAttribute('aria-label', `${audioAction} audio`);
+        btnAudioPlayPause.classList.toggle('active', isAudioPlaying);
     }
 
 
@@ -908,9 +1651,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
     video.addEventListener('timeupdate', updateTimelineVid);
     video.addEventListener('loadedmetadata', updateTimelineVid);
+    video.addEventListener('ended', () => handleMediaEnded('video'));
 
     asmrAudio.addEventListener('timeupdate', updateTimelineAud);
     asmrAudio.addEventListener('loadedmetadata', updateTimelineAud);
+    asmrAudio.addEventListener('ended', () => handleMediaEnded('audio'));
 
     function setProgressVid(e) {
         const rect = progressBgVid.getBoundingClientRect();
@@ -962,6 +1707,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- UI Activity auto-hide ---
     let cursorTimeout;
+    let controlsHovered = false;
 
     function showControls() {
         controlsPanel.classList.add('active');
@@ -971,7 +1717,7 @@ document.addEventListener('DOMContentLoaded', () => {
         clearTimeout(cursorTimeout);
         const hideDelay = document.fullscreenElement ? 1000 : 3000;
         controlsTimeout = setTimeout(() => {
-            if (isGlobalPlaying) {
+            if (isGlobalPlaying && !controlsHovered) {
                 hideControlsImmediate();
                 videoWrapper.style.cursor = 'none';
             }
@@ -979,14 +1725,26 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function hideControlsImmediate() {
-        if (isGlobalPlaying) {
+        if (isGlobalPlaying && !controlsHovered) {
             controlsPanel.classList.remove('active');
             videoWrapper.classList.remove('controls-show');
         }
     }
 
+    controlsPanel.addEventListener('mouseenter', () => {
+        controlsHovered = true;
+        clearTimeout(controlsTimeout);
+        controlsPanel.classList.add('active');
+        videoWrapper.classList.add('controls-show');
+        videoWrapper.style.cursor = 'default';
+    });
+
+    controlsPanel.addEventListener('mouseleave', () => {
+        controlsHovered = false;
+        showControls();
+    });
+
     videoWrapper.addEventListener('mousemove', (e) => {
-        if (Date.now() < suppressVideoClickUntil) return;
         const rect = videoWrapper.getBoundingClientRect();
         const triggerY = rect.bottom - (rect.height / 3);
 
@@ -1023,5 +1781,10 @@ document.addEventListener('DOMContentLoaded', () => {
             btnFullscreen.innerHTML = '<i class="fa-solid fa-expand"></i>';
         }
     });
+
+    updateImageOrderButton();
+    updateMediaEndModeButton();
+    applyPlayerMode();
+    syncGlobalPlaybackState();
 
 });

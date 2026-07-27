@@ -40,8 +40,9 @@ MEDIA_ROOTS_CONFIG = BASE_DIR / 'media_roots.json'
 
 VIDEO_EXTS = {'.mp4', '.webm', '.mkv', '.ogg'}
 AUDIO_EXTS = {'.mp3', '.wav', '.flac', '.aac', '.m4a', '.ogg', '.mka'}
+IMAGE_EXTS = {'.jpg', '.jpeg', '.png', '.webp', '.gif', '.avif', '.bmp'}
 SUBTITLE_EXTS = {'.vtt', '.srt'}
-ALLOWED_MEDIA_EXTS = VIDEO_EXTS | AUDIO_EXTS | SUBTITLE_EXTS
+ALLOWED_MEDIA_EXTS = VIDEO_EXTS | AUDIO_EXTS | IMAGE_EXTS | SUBTITLE_EXTS
 
 
 def load_media_roots():

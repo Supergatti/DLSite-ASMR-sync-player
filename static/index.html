@@ -23,6 +23,7 @@
             
             <div class="sidebar-tabs">
                 <button class="tab-btn active" data-target="pane-video"><i class="fa-solid fa-video"></i> Video</button>
+                <button class="tab-btn" data-target="pane-image"><i class="fa-solid fa-images"></i> Images</button>
                 <button class="tab-btn" data-target="pane-audio"><i class="fa-solid fa-microphone"></i> Audio</button>
             </div>
 
@@ -60,6 +61,42 @@
 
                     <div id="list-video" class="library-results">
                         <div class="empty-state">Loading PC video library...</div>
+                    </div>
+                </div>
+
+                <!-- Image Pane -->
+                <div id="pane-image" class="tab-pane media-list">
+                    <section class="pc-library-panel" aria-label="PC image library">
+                        <div class="library-heading">
+                            <span><i class="fa-solid fa-computer"></i> PC Image Library</span>
+                            <button class="library-icon-btn" id="btn-library-image-refresh" title="Refresh PC image library" aria-label="Refresh PC image library">
+                                <i class="fa-solid fa-rotate"></i>
+                            </button>
+                        </div>
+                        <select id="library-image-root" class="alist-input library-root-select" aria-label="Image media root"></select>
+                        <div class="library-nav-row">
+                            <button class="library-icon-btn" id="btn-library-image-up" title="Parent folder" aria-label="Open parent folder" disabled>
+                                <i class="fa-solid fa-arrow-up"></i>
+                            </button>
+                            <div id="library-image-path" class="library-current-path" title="/">/</div>
+                        </div>
+                    </section>
+
+                    <button class="selector-btn device-folder-btn" id="btn-image-folder">
+                        <i class="fa-solid fa-tablet-screen-button"></i> Files on this device
+                    </button>
+                    <input type="file" id="input-image-folder" accept="image/*" webkitdirectory directory multiple hidden>
+
+                    <div class="source-divider"><span>AList</span></div>
+                    <div class="alist-form">
+                        <div style="display:flex; gap:6px;">
+                            <input type="text" id="alist-img-path" class="alist-input" placeholder="AList /path" style="flex:1;">
+                            <button class="selector-btn mini-btn" id="btn-alist-image" style="width:auto; white-space:nowrap;" aria-label="Load AList images"><i class="fa-solid fa-cloud"></i></button>
+                        </div>
+                    </div>
+
+                    <div id="list-image" class="library-results">
+                        <div class="empty-state">Loading PC image library...</div>
                     </div>
                 </div>
 
@@ -102,6 +139,7 @@
 
             <div class="sidebar-footer" style="display:flex; flex-direction:column; gap:4px;">
                 <div id="now-playing-video" class="footer-label">Video: None</div>
+                <div id="now-playing-image" class="footer-label">Image: None</div>
                 <div id="now-playing-audio" class="footer-label">Audio: None</div>
             </div>
         </aside>
@@ -112,24 +150,63 @@
                 
                 <!-- Hidden Audio element for ASMR layer -->
                 <audio id="asmr-audio" preload="metadata"></audio>
+
+                <div class="player-mode-switch" role="group" aria-label="Player mode">
+                    <button class="mode-btn active" id="btn-mode-video" data-mode="video" aria-pressed="true">
+                        <i class="fa-solid fa-video"></i> Video
+                    </button>
+                    <button class="mode-btn" id="btn-mode-image" data-mode="image" aria-pressed="false">
+                        <i class="fa-solid fa-images"></i> Slideshow
+                    </button>
+                </div>
                 
                 <!-- Main Video Element -->
                 <video id="main-video" preload="metadata" playsinline webkit-playsinline>
                     <track id="track-video" kind="subtitles" label="Video CC" srclang="en">
                 </video>
 
+                <!-- Slideshow Image -->
+                <img id="main-image" class="main-image" alt="" draggable="false" hidden>
+                <div id="image-empty-state" class="image-empty-state">
+                    <i class="fa-regular fa-images"></i>
+                    <span>Select an image folder to start the slideshow</span>
+                </div>
+                <button class="image-edge-control image-edge-prev" id="btn-image-edge-prev" title="Previous image" aria-label="Previous image" hidden>
+                    <i class="fa-solid fa-chevron-left"></i>
+                </button>
+                <button class="image-edge-control image-edge-next" id="btn-image-edge-next" title="Next image" aria-label="Next image" hidden>
+                    <i class="fa-solid fa-chevron-right"></i>
+                </button>
+
                 <!-- Custom Audio Subtitle Overlay -->
                 <div id="audio-sub-overlay" class="audio-sub-overlay"></div>
 
-                <!-- Custom Overlay Play Button (Big) -->
-                <div class="overlay-play-btn" id="overlay-play">
-                    <i class="fa-solid fa-play"></i>
-                </div>
-
                 <!-- Custom Player Controls -->
                 <div class="controls-panel glass-panel">
+
+                    <div class="slideshow-controls" id="slideshow-controls" hidden>
+                        <button class="slideshow-btn slideshow-mode-btn" id="btn-image-order" aria-pressed="false" title="Playback order: sequential">
+                            <i class="fa-solid fa-arrow-down-1-9"></i>
+                            <span>Sequential</span>
+                        </button>
+                        <span id="slideshow-counter" class="slideshow-counter">0 / 0</span>
+                        <label class="slideshow-interval" for="image-interval">
+                            <span class="slideshow-interval-label">Every</span>
+                            <select id="image-interval" aria-label="Image change interval">
+                                <option value="3">3s</option>
+                                <option value="5" selected>5s</option>
+                                <option value="10">10s</option>
+                                <option value="15">15s</option>
+                                <option value="30">30s</option>
+                            </select>
+                        </label>
+                        <button class="slideshow-btn image-zoom-control" id="btn-image-zoom" title="Change image zoom" aria-label="Change image zoom">
+                            <i class="fa-solid fa-magnifying-glass"></i>
+                            <span id="image-zoom-label">100%</span>
+                        </button>
+                    </div>
                     
-                    <div class="timeline-container" style="margin-bottom: 8px;">
+                    <div class="timeline-container video-specific-control" style="margin-bottom: 8px;">
                         <span class="time-text" style="color:var(--accent);"><i class="fa-solid fa-video"></i></span>
                         <span class="time-text" id="time-current-vid">00:00</span>
                         <div class="progress-bar-bg" id="progress-bar-vid">
@@ -149,10 +226,34 @@
                         <span class="time-text" id="time-total-aud">00:00</span>
                     </div>
 
+                    <div class="playback-tools" aria-label="Playback navigation">
+                        <button class="playback-tool-btn" id="btn-seek-back" title="Rewind video and audio 10 seconds" aria-label="Rewind 10 seconds">
+                            <i class="fa-solid fa-rotate-left"></i>
+                            <span>10s</span>
+                        </button>
+                        <button class="playback-tool-btn" id="btn-seek-forward" title="Fast-forward video and audio 10 seconds" aria-label="Fast-forward 10 seconds">
+                            <i class="fa-solid fa-rotate-right"></i>
+                            <span>10s</span>
+                        </button>
+                        <button class="playback-tool-btn" id="btn-next-media" title="Play the next selected video/audio in sequence" aria-label="Play next video and audio">
+                            <i class="fa-solid fa-forward-step"></i>
+                            <span>Next</span>
+                        </button>
+                        <button class="playback-tool-btn playback-end-mode active" id="btn-end-mode" title="After playback: stop" aria-label="After playback: stop">
+                            <i class="fa-solid fa-stop"></i>
+                            <span>Stop</span>
+                        </button>
+                    </div>
+
                     <div class="controls-bottomrow">
                         <div class="left-controls">
-                            <button class="icon-btn" id="btn-play-pause">
+                            <button class="icon-btn component-play-btn" id="btn-play-pause" title="Play video" aria-label="Play video">
                                 <i class="fa-solid fa-play"></i>
+                                <span class="component-badge"><i class="fa-solid fa-video"></i></span>
+                            </button>
+                            <button class="icon-btn component-play-btn" id="btn-audio-play-pause" title="Play audio" aria-label="Play audio">
+                                <i class="fa-solid fa-play"></i>
+                                <span class="component-badge"><i class="fa-solid fa-microphone"></i></span>
                             </button>
                             <button class="icon-btn" id="btn-stop">
                                 <i class="fa-solid fa-stop"></i>
@@ -160,7 +261,7 @@
                         </div>
 
                         <div class="mid-controls">
-                            <div class="volume-control">
+                            <div class="volume-control video-specific-control">
                                 <span class="volume-label"><i class="fa-solid fa-video"></i> Video</span>
                                 <input type="range" class="vol-slider" id="vol-video" min="0" max="1" step="0.01" value="0.5">
                             </div>
